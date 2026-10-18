@@ -35,7 +35,7 @@ export function newGame({ rng = Math.random, first = 'random', lockBreak = true 
     return {
       piles, lb, done, hands, deck, discard: [], turn, first: turn, plays: 0, turns: [0, 0], reshuffles: 0,
       over: false, winner: null, endReason: null, lockBreak, redeals, openSeals,
-      stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0], tucks: [0, 0] },
+      stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0] },
     };
   }
 }
@@ -56,7 +56,7 @@ export function canPlay(state, card, pile, mode) {
 export function playTargets(state, card) {
   const out = [];
   for (let pile = 0; pile < 8; pile++) {
-    const modes = ['cover', 'tuck'].filter((m) => canPlay(state, card, pile, m));
+    const modes = ['cover'].filter((m) => canPlay(state, card, pile, m));
     if (modes.length) out.push({ pile, modes });
   }
   return out;
@@ -78,7 +78,6 @@ export function playCard(state, card, pile, mode) {
   state.done = r.done;
   if (r.discarded.length) state.discard.push(...r.discarded);
   events.push({ t: 'place', player: p, card, pile, mode, kind: r.kind, handIndex: hi, depthBefore: before });
-  if (r.kind === 'tuck') state.stats.tucks[p]++;
   if (r.kind === 'bust') {
     state.stats.busts[p]++;
     events.push({ t: 'bust', player: p, card, pile, force: suitOf(card), discarded: r.discarded, owner: pile >> 2 });
