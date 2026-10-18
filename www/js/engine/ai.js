@@ -75,7 +75,7 @@ export function planTurn(state, p, persona = DEFAULT_PERSONA, difficulty = 'prof
           const card = b.rest[ci];
           const nrest = b.rest.slice(0, ci).concat(b.rest.slice(ci + 1));
           for (let i = 0; i < 8; i++) {
-            for (const mode of ['cover', 'tuck']) {
+            for (const mode of ['cover']) {
               const r = applyFull(b.piles, b.lb, b.done, card, i, mode, lockBreak);
               if (!r) continue;
               let key = nrest.join(',');
