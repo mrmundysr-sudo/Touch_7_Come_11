@@ -79,8 +79,13 @@
   "stuckHint": "Can't find a legal ending? Release the magic to continue.",
   "seal7": "Sealed the 7",
   "seal11": "Sealed the 11",
-  "sealChoose": "Which pair do you seal?",
-  "sealOf": "Seal the {v}: {a} + {b}",
+  "seals": "Seals",
+  "sealsTitle": "Your Seals",
+  "lockOf": "Lock the {v}: {a} + {b}",
+  "unlockOf": "Unlock the {v}",
+  "noSeals": "No pair of your piles adds to 7 or 11 yet.",
+  "unlocked": "Seal released",
+  "readyWin": "Both sealed — end your turn to win",
   "cracked": "Seal broken!",
   "reshuffled": "The Spent pile returns to the deck",
   "sealed": "Sealed",
@@ -142,9 +147,11 @@
    {
     "h": "Seals",
     "b": [
-     "At the end of your turn, any two of your piles that add to <b>7</b> or <b>11</b> <b>seal</b> automatically. An empty pile counts as 0.",
-     "Sealed piles are frozen — except to a Force, which can shatter one and free its partner.",
-     "Never end a turn with an empty pile of your own, unless it just sealed."
+     "Whenever two of your piles add to <b>7</b> or <b>11</b>, tap <b>Seals</b> to <b>lock</b> them. An empty pile counts as 0.",
+     "On your own turn you can lock and <b>unlock</b> as often as you like. Unlocking frees your piles so you can play on them again.",
+     "You win if both the 7 and the 11 are locked when your turn ends.",
+     "Locked piles are frozen — except to a Force, which can shatter one and free its partner.",
+     "Never end a turn with an empty pile of your own, unless it is locked."
     ]
    }
   ]

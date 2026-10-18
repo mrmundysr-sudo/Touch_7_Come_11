@@ -1,6 +1,6 @@
 // The live game screen: renders the engine state, handles input, animates events, runs the opponent.
 import { cardLabel, FORCE_NAMES, is13, suitOf, topValue, valueOf } from '../engine/cards.js';
-import { newGame, playCard, canPlay, previewEnd, endTurn, snapshot, restore, forceLegal } from '../engine/rules.js';
+import { newGame, playCard, canPlay, previewEnd, endTurn, snapshot, restore, forceLegal, lockOptions, lockedPairs, lockPair, unlockPair, runStep } from '../engine/rules.js';
 import { planTurn } from '../engine/ai.js';
 import { playTargets } from '../engine/rules.js';
 import { Art } from '../assets.js';
@@ -27,6 +27,7 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
   const bubble = $('#bubble');
   const btnEnd = $('#btnEnd');
   const btnUndo = $('#btnUndo');
+  const btnSeals = $('#btnSeals');
   const statusEl = $('#status');
   const T = text.game;
 
@@ -59,6 +60,8 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
 
   $('#btnUndo').textContent = T.undo;
   $('#btnEnd').textContent = T.endTurn;
+  btnSeals.textContent = T.seals;
+  btnSeals.addEventListener('click', () => onSeals());
   btnEnd.addEventListener('click', () => onEnd());
   btnUndo.addEventListener('click', () => onUndo());
   $('#btnMenu').addEventListener('click', () => { Sound.sfx('tap'); onOpenSheet(); });
@@ -405,12 +408,15 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     btnUndo.disabled = !mine || !undo.length;
     btnEnd.disabled = !mine || n > 0;
     btnEnd.classList.toggle('ready', mine && n === 0);
+    const canSeal = mine && (lockOptions(S, 0).length > 0 || lockedPairs(S, 0).length > 0);
+    btnSeals.disabled = !canSeal;
+    btnSeals.classList.toggle('ready', mine && lockOptions(S, 0).length > 0);
     if (S.over) setStatus('');
     else if (S.turn !== 0) setStatus(fmt(T.foeThinks, { name: foe.short }), true);
     else if (busy) setStatus(T.yourMove);
     else if (n > 1) setStatus(fmt(T.castN, { n }), false);
     else if (n === 1) setStatus(T.castOne);
-    else setStatus(T.readyEnd, true);
+    else setStatus(S.done[0] === 3 ? T.readyWin : T.readyEnd, true);
   }
 
   function select(id) {
@@ -532,13 +538,11 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
       if (pv.reason === 'force-on-top' || pv.reason === 'empty-pile') maybeOfferRelease();
       return;
     }
-    let choice = null;
-    if (pv.needsChoice) { choice = await chooseSeal(pv.choices); if (choice == null) return; }
     const t = token;
     busy = true;
     refreshControls();
     Sound.sfx('tap');
-    const res = endTurn(S, { choice, rng: Math.random });
+    const res = endTurn(S, { rng: Math.random });
     await processEnd(res.events, 0, t);
     if (t !== token) return;
     if (!S.over) nextTurn(t);
@@ -565,26 +569,68 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     };
   }
 
-  function chooseSeal(choices) {
-    return new Promise((resolve) => {
-      const modal = $('#modal');
-      const lab = (p) => signed(topValue(S.piles[p]));
-      modal.innerHTML = `<div class="panel"><h3>${T.sealChoose}</h3>${choices.map((c, k) => {
-        const o = c.seals[0];
-        return `<button class="btn gold choice" data-k="${k}">${fmt(T.sealOf, { v: o.value, a: lab(o.piles[0]), b: lab(o.piles[1]) })}</button>`;
-      }).join('')}<button class="btn ghost choice" data-k="-1">${text.settings.resume}</button></div>`;
-      modal.classList.add('open');
-      Sound.sfx('pop');
-      $$('button', modal).forEach((b) => b.addEventListener('click', () => {
-        const k = +b.dataset.k;
+  // ---------- locking and unlocking (your own turn, as often as you like) ----------
+  function onSeals() {
+    if (busy || S.turn !== 0 || S.over) return;
+    Sound.sfx('tap');
+    const lab = (p) => signed(topValue(S.piles[p]));
+    const locks = lockOptions(S, 0);
+    const unlocks = lockedPairs(S, 0);
+    const modal = $('#modal');
+    const rows = [];
+    locks.forEach((o, k) => rows.push(`<button class="btn gold choice" data-act="lock" data-k="${k}">${fmt(T.lockOf, { v: o.value, a: lab(o.piles[0]), b: lab(o.piles[1]) })}</button>`));
+    unlocks.forEach((u, k) => rows.push(`<button class="btn ghost choice" data-act="unlock" data-k="${k}">${fmt(T.unlockOf, { v: u.value })}</button>`));
+    if (!rows.length) rows.push(`<p class="sub">${T.noSeals}</p>`);
+    modal.innerHTML = `<div class="panel"><h3>${T.sealsTitle}</h3>${rows.join('')}<button class="btn ghost choice" data-act="close">${text.settings.resume}</button></div>`;
+    modal.classList.add('open');
+    const clear = () => slots.forEach((sl) => sl.classList.remove('can', 'cover'));
+    const glow = (idx) => { clear(); idx.forEach((i) => slots[i].classList.add('can', 'cover')); };
+    $$('button', modal).forEach((b) => {
+      const o = b.dataset.act === 'lock' ? locks[+b.dataset.k] : b.dataset.act === 'unlock' ? unlocks[+b.dataset.k] : null;
+      if (o) { b.addEventListener('pointerenter', () => glow(o.piles)); b.addEventListener('focus', () => glow(o.piles)); b.addEventListener('pointerleave', clear); }
+      b.addEventListener('click', () => {
+        clear();
         modal.classList.remove('open');
-        resolve(k < 0 ? null : k);
-      }));
-      // glow the candidate pairs while the panel is up
-      choices.forEach((c) => c.seals[0].piles.forEach((p) => slots[p].classList.add('can', 'cover')));
-      const clear = () => slots.forEach((s) => s.classList.remove('can', 'cover'));
-      $$('button', modal).forEach((b) => b.addEventListener('click', clear));
+        if (b.dataset.act === 'lock') doHumanLock(o);
+        else if (b.dataset.act === 'unlock') doHumanUnlock(o);
+      });
     });
+  }
+  function doHumanLock(o) {
+    undo.push(snapshot(S));
+    const res = lockPair(S, o.piles, o.bit);
+    if (!res.ok) { undo.pop(); return; }
+    animateLock(res.events[0], 0);
+    reactToEvents(res.events, 0);
+    sel = null;
+    renderPiles();
+    renderCoins();
+    refreshControls();
+  }
+  function doHumanUnlock(u) {
+    undo.push(snapshot(S));
+    const res = unlockPair(S, u.bit);
+    if (!res.ok) { undo.pop(); return; }
+    animateLock(res.events[0], 0);
+    renderPiles();
+    renderCoins();
+    refreshControls();
+  }
+  /** The visible side of a lock or an unlock (state is already updated). */
+  function animateLock(ev, who) {
+    renderPiles();
+    renderCoins();
+    if (ev.t === 'seal') {
+      lightSlots(ev.piles, 'sealing');
+      Sound.sfx('seal');
+      Haptics.pulse([20, 30, 60]);
+      toast(T['seal' + ev.value]);
+    } else {
+      lightSlots(ev.piles, 'cracked');
+      Sound.sfx('unseal');
+      Haptics.pulse([20, 20]);
+      toast(T.unlocked);
+    }
   }
 
   async function processEnd(events, who, t) {
@@ -659,13 +705,21 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     const res = planTurn(S, 1, foe.persona, diff, Math.random);
     for (const m of res.plan) {
       if (t !== token) return;
-      const from = foeHandRect();
-      const r = playCard(S, m.card, m.pile, m.mode);
-      if (!r.ok) break;
-      await animatePlay(r.events, from, 1, t);
-      if (t !== token) return;
-      reactToEvents(r.events, 1);
-      await tick(380);
+      if (m.type === 'play') {
+        const from = foeHandRect();
+        const r = playCard(S, m.card, m.pile, m.mode);
+        if (!r.ok) break;
+        await animatePlay(r.events, from, 1, t);
+        if (t !== token) return;
+        reactToEvents(r.events, 1);
+        await tick(380);
+      } else {
+        const r = runStep(S, m);
+        if (!r.ok) continue;
+        animateLock(r.events[0], 1);
+        reactToEvents(r.events, 1);
+        await tick(950);
+      }
     }
     if (t !== token) return;
     if (S.hands[1].length) emergencyFinish();

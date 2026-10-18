@@ -2,7 +2,8 @@
 // Boards are described by three plain values:
 //   piles : array(8) of arrays of card ids, bottom -> top.  Player p owns piles 4p..4p+3.
 //   lb    : array(8) - 0 if the pile is live, else the target bit it is sealed for (1 = the 7 pair, 2 = the 11 pair)
-//   done  : [mask0, mask1] - bit 1 = 7 sealed, bit 2 = 11 sealed (3 = both = win)
+//   done  : [mask0, mask1] - bit 1 = 7 sealed, bit 2 = 11 sealed (3 = both = win when the turn ends)
+// Seals are chosen by the player (lock / unlock during their own turn); only a 13 played on a sealed pile breaks one by force.
 import { is13, topIs13, topValue } from './cards.js';
 
 export const TARGETS = [
@@ -138,21 +139,20 @@ export function playerDistance(piles, lb, done, p) {
   return distance(live.map((i) => topValue(piles[i])), remainingTargets(done[p]));
 }
 
-/** All legal ways for player p to finish a turn on this board (sealing is automatic, so each way
- *  is one forced seal choice). Returns {legal:[{seals, win}], reason}. */
-export function endCandidatesCore(piles, lb, done, p) {
-  const info = sealOptions(piles, lb, done, p);
-  let cands;
-  if (info.win) cands = [{ seals: info.win, win: true }];
-  else if (info.options.length) cands = info.options.map((o) => ({ seals: [o], win: false }));
-  else cands = [{ seals: [], win: false }];
-  const legal = [];
-  let reason = null;
-  for (const c of cands) {
-    const sealed = new Set(c.seals.flatMap((o) => o.piles));
-    const lg = endLegality(piles, lb, done, p, sealed);
-    if (lg.legal) legal.push(c);
-    else if (!reason) reason = lg.reason;
+/** Every set of locks a player could apply right now: nothing, one pair, or one pair for each target
+ *  (two disjoint pairs). Used by the AI to pick its final locks. */
+export function lockSets(piles, lb, done, p) {
+  const { options } = sealOptions(piles, lb, done, p);
+  const sets = [[]];
+  for (const o of options) sets.push([o]);
+  for (let x = 0; x < options.length; x++) {
+    for (let y = x + 1; y < options.length; y++) {
+      const a = options[x];
+      const b = options[y];
+      if (a.bit === b.bit) continue;
+      if (a.piles.some((i) => b.piles.includes(i))) continue;
+      sets.push([a, b]);
+    }
   }
-  return { legal, reason, info };
+  return sets;
 }

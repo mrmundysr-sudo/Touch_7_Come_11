@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { cardId, seeded, is13, valueOf } from '../www/js/engine/cards.js';
 import { applyFull } from '../www/js/engine/core.js';
-import { newGame, playCard, endTurn, previewEnd, canPlay, forceLegal } from '../www/js/engine/rules.js';
+import { newGame, playCard, endTurn, previewEnd, canPlay, forceLegal, lockPair, unlockPair, lockOptions, runStep } from '../www/js/engine/rules.js';
 import { planTurn } from '../www/js/engine/ai.js';
 
 const SUN = 0, BLOOM = 1, MOON = 2, THORN = 3;
@@ -28,16 +28,15 @@ test('card values: positive suits add, negative subtract, 13 has no value', () =
   assert.ok(is13(c(THORN, 13)));
 });
 
-test('deal: 4 piles + 4-card hand each, 36 left, never a 13 on top, never an instant win', () => {
+test('deal: 4 piles + 4-card hand each, 36 left, never a 13 on top, nothing starts locked', () => {
   for (let seed = 1; seed <= 400; seed++) {
     const g = newGame({ rng: seeded(seed) });
     assert.equal(g.deck.length + g.piles.flat().length + g.hands.flat().length, 52);
     assert.equal(g.hands[0].length, 4);
     assert.equal(g.hands[1].length, 4);
     for (const p of g.piles) assert.ok(p.length >= 1 && !is13(p[p.length - 1]));
-    assert.notEqual(g.done[0], 3);
-    assert.notEqual(g.done[1], 3);
-    for (let i = 0; i < 8; i++) if (g.lb[i]) assert.ok(g.done[i >> 2] & g.lb[i]);
+    assert.deepEqual(g.done, [0, 0]);
+    assert.ok(g.lb.every((v) => v === 0));
   }
 });
 
@@ -95,29 +94,94 @@ test('a pile emptied by the opponent may stay empty through MY end of turn only 
   assert.equal(pv.legal, true, 'opponent empty pile is their job to refill');
 });
 
-test('sealing: two piles totalling 7 lock automatically; empty pile counts as 0', () => {
+test('nothing locks by itself: ending a turn with a 7 pair showing does not seal it', () => {
   const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 9)], [c(SUN, 1)]], hands: [[], []], deck: [1, 2, 3, 4, 5, 6, 7, 8] });
-  const r = endTurn(s, {});
+  assert.ok(endTurn(s, {}).ok);
+  assert.equal(s.done[0], 0);
+  assert.deepEqual(s.lb, new Array(8).fill(0));
+});
+
+test('LOCK: the player chooses a pair that adds to 7 or 11; empty pile counts as 0', () => {
+  const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 9)], [c(SUN, 1)]], hands: [[], []] });
+  assert.deepEqual(lockOptions(s).map((o) => [o.piles.join(), o.value]), [['0,1', 7]]);
+  assert.equal(lockPair(s, [0, 2], 1).ok, false, '3 + 9 is not 7');
+  assert.equal(lockPair(s, [0, 1], 2).ok, false, 'a 7 pair cannot lock the 11');
+  assert.equal(lockPair(s, [4, 5], 1).ok, false, "cannot lock the opponent's piles");
+  const r = lockPair(s, [0, 1], 1);
   assert.ok(r.ok);
   assert.ok(r.events.some((e) => e.t === 'seal' && e.value === 7));
   assert.equal(s.done[0], 1);
   assert.deepEqual(s.lb.slice(0, 4), [1, 1, 0, 0]);
-  // zero pair
-  const z = mk({ piles: [[], [c(SUN, 7)], [c(SUN, 9)], [c(MOON, 2)]], hands: [[], []], deck: [1, 2, 3, 4, 5, 6, 7, 8] });
-  assert.equal(previewEnd(z).legal, true);
-  assert.ok(endTurn(z, {}).ok);
-  assert.equal(z.done[0], 1);
-  // two empties never seal and are illegal
-  const z2 = mk({ piles: [[], [], [c(SUN, 9)], [c(MOON, 2)]], hands: [[], []] });
-  assert.equal(previewEnd(z2).legal, false);
+  assert.equal(lockPair(s, [0, 1], 1).ok, false, 'already locked');
+  const z = mk({ piles: [[], [c(SUN, 7)], [c(SUN, 9)], [c(MOON, 2)]], hands: [[], []] });
+  assert.ok(lockPair(z, [0, 1], 1).ok, 'empty pile (0) + 7');
+  const z2 = mk({ piles: [[], [], [c(SUN, 9)], [c(SUN, 3)]], hands: [[], []] });
+  assert.equal(lockOptions(z2).length, 0);
+  assert.equal(previewEnd(z2).legal, false, 'two empty piles still block the end of the turn');
 });
 
-test('both targets sealed in one turn wins immediately', () => {
+test('LOCK: a pile with a 13 on top cannot be locked', () => {
+  const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4), c(THORN, 13)], [c(SUN, 9)], [c(SUN, 1)]], hands: [[], []] });
+  assert.equal(lockOptions(s).length, 0);
+});
+
+test('UNLOCK: a player can free their own pair on their turn, any number of times, then play on it', () => {
+  const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 9)], [c(SUN, 1)]], hands: [[c(SUN, 2)], []] });
+  assert.ok(lockPair(s, [0, 1], 1).ok);
+  assert.equal(canPlay(s, c(SUN, 2), 0, 'cover'), false, 'locked piles are frozen');
+  for (let k = 0; k < 3; k++) {
+    const u = unlockPair(s, 1);
+    assert.ok(u.ok);
+    assert.ok(u.events.some((e) => e.t === 'unlock' && e.bit === 1));
+    assert.equal(s.done[0], 0);
+    assert.deepEqual(s.lb, new Array(8).fill(0));
+    assert.deepEqual(s.piles[0], [c(SUN, 3)], 'cards stay where they were');
+    assert.ok(lockPair(s, [0, 1], 1).ok);
+  }
+  assert.ok(unlockPair(s, 1).ok);
+  assert.equal(unlockPair(s, 1).ok, false, 'nothing left to unlock');
+  assert.equal(unlockPair(s, 2).ok, false, 'the 11 was never locked');
+  assert.ok(playCard(s, c(SUN, 2), 0, 'cover').ok);
+});
+
+test('lock and unlock only work on your own turn, and only on your own piles', () => {
+  const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)]], hands: [[], []], turn: 1 });
+  s.piles[4] = [c(SUN, 3)]; s.piles[5] = [c(BLOOM, 4)];
+  assert.equal(lockPair(s, [0, 1], 1).ok, false, "it is the opponent's turn, so player 0's piles are not theirs");
+  assert.ok(lockPair(s, [4, 5], 1).ok);
+  s.turn = 0;
+  assert.equal(unlockPair(s, 1).ok, false, "cannot unlock the opponent's pair");
+});
+
+test('both targets locked wins when the turn ends (not before)', () => {
   const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 6)], [c(BLOOM, 5)]], hands: [[], []] });
+  assert.ok(lockPair(s, [0, 1], 1).ok);
+  assert.equal(s.over, false);
+  assert.ok(lockPair(s, [2, 3], 2).ok);
+  assert.equal(s.over, false, 'locking alone never ends the game');
+  assert.equal(previewEnd(s).win, true);
   const r = endTurn(s, {});
   assert.ok(r.ok);
   assert.equal(s.over, true);
   assert.equal(s.winner, 0);
+  const t = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 6)], [c(BLOOM, 5)]], hands: [[], [c(SUN, 2)]], deck: [1, 2, 3, 4, 5, 6, 7, 8] });
+  lockPair(t, [0, 1], 1); lockPair(t, [2, 3], 2); unlockPair(t, 2);
+  assert.ok(endTurn(t, {}).ok);
+  assert.equal(t.over, false, 'unlocking before ending takes the win away');
+});
+
+test('locked piles satisfy the end-of-turn rules (an empty locked pile is fine)', () => {
+  const s = mk({ piles: [[], [c(SUN, 7)], [c(SUN, 9)], [c(MOON, 2)]], hands: [[], []] });
+  assert.equal(previewEnd(s).legal, false);
+  lockPair(s, [0, 1], 1);
+  assert.equal(previewEnd(s).legal, true);
+});
+
+test('runStep runs AI plan steps', () => {
+  const s = mk({ piles: [[c(SUN, 3)], [c(BLOOM, 4)], [c(SUN, 9)], [c(SUN, 1)]], hands: [[c(SUN, 2)], []] });
+  assert.ok(runStep(s, { type: 'play', card: c(SUN, 2), pile: 2, mode: 'cover' }).ok);
+  assert.ok(runStep(s, { type: 'lock', piles: [0, 1], bit: 1 }).ok);
+  assert.ok(runStep(s, { type: 'unlock', bit: 1 }).ok);
 });
 
 test('seals are frozen: normal cards cannot go on a sealed pile', () => {
@@ -178,8 +242,8 @@ function playFullGame(seed, diffs, personas, lockBreak = true) {
     const p = g.turn;
     const { plan, legal } = planTurn(g, p, personas[p], diffs[p], rng);
     for (const m of plan) {
-      const r = playCard(g, m.card, m.pile, m.mode);
-      assert.ok(r.ok, `AI produced an illegal play (seed ${seed})`);
+      const r = runStep(g, m);
+      assert.ok(r.ok, `AI produced an illegal step (seed ${seed})`);
     }
     if (!previewEnd(g).legal) { fallbacks++; forceLegal(g); }
     const e = endTurn(g, { rng, force: true });
@@ -204,7 +268,7 @@ test('AI plays complete, legal games to a finish (all difficulties)', () => {
   }
 });
 
-test('the engine plays like the measured Python simulator (balanced mirror, lock-breaking on)', () => {
+test('AI mirror games finish in a sensible number of turns (player-chosen locks, lock-breaking on)', () => {
   const P = { wOpp: 0.6, oppSeal: 12, ownSeal: 12, forceRefill: 0 };
   let plays = 0, deckouts = 0, long = 0, first = 0, n = 120, fb = 0;
   for (let s = 1; s <= n; s++) {

@@ -25,6 +25,11 @@ Guidance for Claude when working in this repo.
 - `python3 tools/prepare_art.py <visual-assets-folder> www/art` - regenerate art from the App Visual Builder export
 - `python3 tools/gen_audio.py www/audio` - regenerate synthesized sounds
 
+## Locking rules (as implemented)
+- Nothing locks by itself and nobody starts locked. On your own turn you tap **Seals** to lock a pair of your piles that adds to 7 or 11, or to unlock a pair you locked. No limit on how often, no cost.
+- Both targets locked when the turn ends wins. Locked piles are frozen, except that a 13 played on one breaks the seal (the "Forces Break Seals" setting).
+- Engine: `lockPair`, `unlockPair`, `lockOptions`, `lockedPairs`, `runStep` in `www/js/engine/rules.js`. The AI plan is a list of steps: `{type:'unlock'|'play'|'lock', ...}`.
+
 ## Conventions
 - Keep game rules in `www/js/engine/` free of DOM and browser APIs so they stay testable under Node. Any rule or AI change needs a test in `tests/engine.test.mjs`.
 - Do not hard-code art, sound or text paths/strings in JS. Use the slot names in `art-config.json`, the names in `audio-config.json`, and `data/text.json` / `data/characters.json`. The README documents the available slots (including optional mood art and per-card overrides).

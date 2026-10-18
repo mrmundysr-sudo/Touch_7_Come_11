@@ -1,16 +1,15 @@
-// Touch 7 Come 11 - game state machine (rules as finalised in the rulebook, plus lock-breaking).
+// Touch 7 Come 11 - game state machine (rules as finalised in the rulebook, plus lock-breaking and player-chosen lock/unlock).
 // Player 0 is the human, player 1 is the opponent. Everything here is pure game logic (no DOM, no audio),
 // so the same code is unit-tested in Node and drives the real game.
 import { freshDeck, shuffle, suitOf, topIs13 } from './cards.js';
 import {
-  HAND_SIZE, POP, applyFull, bestSealOption, endCandidatesCore, ownPiles, playerDistance, sealOptions,
+  HAND_SIZE, POP, applyFull, endLegality, ownPiles, playerDistance, sealOptions,
 } from './core.js';
 
 export { HAND_SIZE };
 
 export function newGame({ rng = Math.random, first = 'random', lockBreak = true } = {}) {
-  let redeals = 0;
-  for (;;) {
+  {
     const deck = freshDeck(rng);
     const piles = Array.from({ length: 8 }, () => [deck.pop()]);
     const hands = [[], []];
@@ -18,23 +17,11 @@ export function newGame({ rng = Math.random, first = 'random', lockBreak = true 
     for (let i = 0; i < 8; i++) while (topIs13(piles[i])) piles[i].push(deck.pop()); // a dealt 13 is covered
     const lb = new Array(8).fill(0);
     const done = [0, 0];
-    let tooGood = false;
-    const openSeals = [];
-    for (let p = 0; p < 2; p++) {
-      const info = sealOptions(piles, lb, done, p);
-      if (info.rem && info.rem.length === 2 && info.win && info.win.length === 2) { tooGood = true; break; }
-      const pick = bestSealOption(info, rng);
-      if (pick) {
-        for (const i of pick.piles) lb[i] = pick.bit;
-        done[p] |= pick.bit;
-        openSeals.push({ player: p, piles: pick.piles, bit: pick.bit, value: pick.value });
-      }
-    }
-    if (tooGood) { redeals++; continue; }
+    const openSeals = []; // nobody starts locked: players lock when they choose to
     const turn = first === 'random' ? (rng() < 0.5 ? 0 : 1) : first;
     return {
       piles, lb, done, hands, deck, discard: [], turn, first: turn, plays: 0, turns: [0, 0], reshuffles: 0,
-      over: false, winner: null, endReason: null, lockBreak, redeals, openSeals,
+      over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals,
       stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0] },
     };
   }
@@ -90,18 +77,51 @@ export function playCard(state, card, pile, mode) {
   return { ok: true, events };
 }
 
-function endCandidates(state) {
-  return endCandidatesCore(state.piles, state.lb, state.done, state.turn);
+/** Pairs the current player could lock right now: [{piles:[i,j], value, bit}]. (UI helper) */
+export function lockOptions(state, p = state.turn) {
+  if (state.over) return [];
+  return sealOptions(state.piles, state.lb, state.done, p).options;
 }
 
-/** Safety valve preview: same seals, but ignore the "no empty pile / no 13 on top" requirements. */
-function forcedPreview(state) {
-  const info = sealOptions(state.piles, state.lb, state.done, state.turn);
-  let cands;
-  if (info.win) cands = [{ seals: info.win, win: true }];
-  else if (info.options.length) cands = info.options.map((o) => ({ seals: [o], win: false }));
-  else cands = [{ seals: [], win: false }];
-  return { legal: true, reason: null, choices: cands, needsChoice: false, win: cands[0].win };
+/** Which of the current player's targets are locked right now: [{bit, value, piles}]. (UI helper) */
+export function lockedPairs(state, p = state.turn) {
+  const out = [];
+  for (const [bit, value] of [[1, 7], [2, 11]]) {
+    if (state.done[p] & bit) out.push({ bit, value, piles: ownPiles(p).filter((i) => state.lb[i] === bit) });
+  }
+  return out;
+}
+
+/** Lock a pair of the current player's piles (two piles whose tops add to a target not yet locked).
+ *  Free, any number of times, only on your own turn. */
+export function lockPair(state, piles, bit) {
+  if (state.over) return { ok: false, reason: 'over', events: [] };
+  const p = state.turn;
+  const opt = lockOptions(state, p).find((o) => o.bit === bit && o.piles.length === piles.length && o.piles.every((i) => piles.includes(i)));
+  if (!opt) return { ok: false, reason: 'illegal', events: [] };
+  for (const i of opt.piles) state.lb[i] = opt.bit;
+  state.done[p] |= opt.bit;
+  state.stats.seals[p]++;
+  return { ok: true, events: [{ t: 'seal', player: p, piles: opt.piles, bit: opt.bit, value: opt.value }] };
+}
+
+/** Unlock one of the current player's own locked pairs (bit 1 = the 7, 2 = the 11). The cards stay as they are
+ *  and the piles can be played on again. Free, any number of times, only on your own turn. */
+export function unlockPair(state, bit) {
+  if (state.over) return { ok: false, reason: 'over', events: [] };
+  const p = state.turn;
+  if (!(state.done[p] & bit)) return { ok: false, reason: 'not-locked', events: [] };
+  const piles = ownPiles(p).filter((i) => state.lb[i] === bit);
+  for (const i of piles) state.lb[i] = 0;
+  state.done[p] &= ~bit;
+  return { ok: true, events: [{ t: 'unlock', player: p, piles, bit, value: bit === 1 ? 7 : 11 }] };
+}
+
+/** Run one step of an AI plan: {type:'play'|'lock'|'unlock', ...}. */
+export function runStep(state, step) {
+  if (step.type === 'unlock') return unlockPair(state, step.bit);
+  if (step.type === 'lock') return lockPair(state, step.piles, step.bit);
+  return playCard(state, step.card, step.pile, step.mode);
 }
 
 /** What would happen if the player ended their turn now? (UI helper) */
@@ -109,32 +129,18 @@ export function previewEnd(state) {
   const p = state.turn;
   if (state.over) return { legal: false, reason: 'over' };
   if (state.hands[p].length > 0) return { legal: false, reason: 'cards-left' };
-  const { legal, reason } = endCandidates(state);
-  if (!legal.length) return { legal: false, reason };
-  return { legal: true, reason: null, choices: legal, needsChoice: legal.length > 1 && !legal[0].win, win: legal[0].win };
+  const lg = endLegality(state.piles, state.lb, state.done, p);
+  if (!lg.legal) return { legal: false, reason: lg.reason };
+  return { legal: true, reason: null, win: state.done[p] === 3 };
 }
 
-/** Finish the turn: seal pairs, check the win, refill the hand, hand over to the other player. */
-export function endTurn(state, { choice = null, rng = Math.random, force = false } = {}) {
+/** Finish the turn: check the win, refill the hand, hand over to the other player.
+ *  Nothing locks by itself any more - locks are the player's own choice during the turn. */
+export function endTurn(state, { rng = Math.random, force = false } = {}) {
   const p = state.turn;
   const events = [];
-  let pv = previewEnd(state);
-  if (!pv.legal && force && state.hands[p].length === 0) pv = forcedPreview(state);
-  if (!pv.legal) return { ok: false, reason: pv.reason, events };
-  let pick = choice != null ? pv.choices[choice] : null;
-  if (!pick) {
-    if (pv.choices.length === 1 || pv.win) pick = pv.choices[0];
-    else {
-      const best = bestSealOption({ ...sealOptions(state.piles, state.lb, state.done, p), options: pv.choices.map((c) => c.seals[0]) }, rng);
-      pick = pv.choices.find((c) => c.seals[0] === best) || pv.choices[0];
-    }
-  }
-  for (const o of pick.seals) {
-    for (const i of o.piles) state.lb[i] = o.bit;
-    state.done[p] |= o.bit;
-    state.stats.seals[p]++;
-    events.push({ t: 'seal', player: p, piles: o.piles, bit: o.bit, value: o.value });
-  }
+  const pv = previewEnd(state);
+  if (!pv.legal && !(force && state.hands[p].length === 0 && !state.over)) return { ok: false, reason: pv.reason, events };
   state.turns[p]++;
   if (state.done[p] === 3) {
     state.over = true; state.winner = p; state.endReason = 'seals';

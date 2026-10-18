@@ -161,10 +161,10 @@ img{-webkit-user-drag:none}
 .mini-stack .lbl{position:absolute;top:50%;left:42px;transform:translateY(-50%);text-align:left;font-family:var(--caps);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:#d9c89a;text-shadow:0 1px 4px #000,0 0 8px #000;white-space:nowrap}
 .mini-stack.spent .lbl{left:auto;right:42px;text-align:right}
 
-.controls{position:absolute;left:0;right:0;top:71.5%;padding:0 12px;display:flex;align-items:center;gap:8px;z-index:6}
-.controls .btn{padding:9px 12px;font-size:12.5px}
+.controls{position:absolute;left:0;right:0;top:71.5%;padding:0 10px;display:flex;align-items:center;gap:6px;z-index:6}
+.controls .btn{padding:9px 10px;font-size:12px}
 .controls .coins.me{margin:0 auto 0 0}
-#btnEnd.ready{animation:readyPulse 1.2s ease-in-out infinite}
+#btnEnd.ready,#btnSeals.ready{animation:readyPulse 1.2s ease-in-out infinite}
 @keyframes readyPulse{0%,100%{box-shadow:0 2px 0 #7a5214,0 6px 16px rgba(0,0,0,.5),0 0 0 0 rgba(255,210,90,.7)}50%{box-shadow:0 2px 0 #7a5214,0 6px 16px rgba(0,0,0,.5),0 0 0 9px rgba(255,210,90,0)}}
 
 .hand{position:absolute;left:0;right:0;top:77.5%;bottom:0;z-index:5;perspective:900px;touch-action:none}
