@@ -1,0 +1,19 @@
+{
+  "name": "touch-7-come-11",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Touch 7 Come 11 - a two-player card duel (you vs. a wizard or witch).",
+  "scripts": {
+    "test": "node --test",
+    "serve": "node tools/serve.mjs"
+  },
+  "dependencies": {
+    "@capacitor/android": "^7.0.0",
+    "@capacitor/app": "^7.0.0",
+    "@capacitor/core": "^7.0.0"
+  },
+  "devDependencies": {
+    "@capacitor/cli": "^7.0.0"
+  }
+}

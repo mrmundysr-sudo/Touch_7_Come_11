@@ -1,0 +1,8 @@
+{
+  "appId": "com.touch7come11.game",
+  "appName": "Touch 7 Come 11",
+  "webDir": "www",
+  "backgroundColor": "#0b0a1c",
+  "android": { "allowMixedContent": false },
+  "server": { "androidScheme": "https" }
+}
