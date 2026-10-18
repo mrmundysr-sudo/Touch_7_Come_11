@@ -15,7 +15,7 @@ export const HAND_SIZE = 4;
 export const ownPiles = (p) => [4 * p, 4 * p + 1, 4 * p + 2, 4 * p + 3];
 export const remainingTargets = (done) => TARGETS.filter((t) => !(done & t.bit)).map((t) => t.value);
 
-/** Play one card on one pile. The only mode is 'cover': the card goes on top, hiding whatever was showing.
+/** Play one card on one pile. mode: 'cover' (on top) or 'tuck' (hidden, beneath the top card).
  *  Returns null if illegal, otherwise {piles, lb, done, discarded, kind, broke}. Does not mutate inputs. */
 export function applyFull(piles, lb, done, card, i, mode, lockBreak = true) {
   const pile = piles[i];
@@ -46,10 +46,18 @@ export function applyFull(piles, lb, done, card, i, mode, lockBreak = true) {
       if (pile.length) return { piles: set([]), lb, done, discarded: pile.concat([card]), kind: 'bust', broke: null };
       return { piles: set([card]), lb, done, discarded: [], kind: 'base', broke: null };
     }
-    return null;
+    if (!pile.length) return null; // nothing to tuck beneath
+    return { piles: set(tuckInto(pile, card)), lb, done, discarded: [], kind: 'tuck', broke: null };
   }
-  if (mode !== 'cover') return null;
-  return { piles: set(pile.concat([card])), lb, done, discarded: [], kind: 'cover', broke: null };
+  if (mode === 'cover') return { piles: set(pile.concat([card])), lb, done, discarded: [], kind: 'cover', broke: null };
+  if (!pile.length) return null;
+  return { piles: set(tuckInto(pile, card)), lb, done, discarded: [], kind: 'tuck', broke: null };
+}
+
+function tuckInto(pile, card) {
+  const out = pile.slice(0, -1);
+  out.push(card, pile[pile.length - 1]);
+  return out;
 }
 
 /** Which pairs could the player seal right now? */

@@ -61,6 +61,7 @@
   "foeThinks": "{name} is scheming…",
   "foeMove": "{name}'s Move",
   "cover": "Cover",
+  "tuck": "Tuck",
   "bust": "Unleash",
   "bury": "Bury",
   "base": "Plant",
@@ -127,7 +128,7 @@
     "h": "Your Turn",
     "b": [
      "You hold 4 cards. <b>Cast every one</b>, onto <i>any</i> pile — yours or your opponent's.",
-     "Each card goes on top of a pile and <b>covers</b> whatever was showing. Play as many cards as you like on one pile.",
+     "<b>Cover</b> puts a card on top. <b>Tuck</b> slips it hidden beneath the top card.",
      "Then end your turn and draw back up to 4."
     ]
    },
@@ -135,7 +136,7 @@
     "h": "Forces & Busts",
     "b": [
      "A Force <b>covering</b> a pile blasts it away — every card in it goes to the Spent pile.",
-     "A Force you <b>cover</b> with another card is hidden and does nothing... until that pile is blasted later.",
+     "A Force <b>tucked</b> beneath does nothing... until that pile is blasted later.",
      "A Force may start an empty pile, but it can't be left on top when your turn ends."
     ]
    },

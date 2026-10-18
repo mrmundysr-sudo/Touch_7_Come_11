@@ -15,7 +15,7 @@ function mk({ piles, hands = [[], []], turn = 0, lb, done = [0, 0], deck = [], d
   return {
     piles: full, lb: lb || new Array(8).fill(0), done, hands, deck, discard, turn, first: turn, plays: 0,
     turns: [0, 0], reshuffles: 0, over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals: [],
-    stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0] },
+    stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0], tucks: [0, 0] },
   };
 }
 
@@ -41,36 +41,44 @@ test('deal: 4 piles + 4-card hand each, 36 left, never a 13 on top, never an ins
   }
 });
 
-test('every card goes on top; tuck is no longer a mode', () => {
+test('cover vs tuck: tuck leaves the visible top alone', () => {
   const s = mk({ piles: [[c(SUN, 3)]], hands: [[c(BLOOM, 4), c(MOON, 2)], []] });
-  assert.equal(canPlay(s, c(BLOOM, 4), 0, 'tuck'), false);
-  assert.ok(playCard(s, c(BLOOM, 4), 0, 'cover').ok);
+  assert.ok(playCard(s, c(BLOOM, 4), 0, 'tuck').ok);
+  assert.deepEqual(s.piles[0], [c(BLOOM, 4), c(SUN, 3)]);
   assert.ok(playCard(s, c(MOON, 2), 0, 'cover').ok);
-  assert.deepEqual(s.piles[0], [c(SUN, 3), c(BLOOM, 4), c(MOON, 2)]);
+  assert.equal(s.piles[0][s.piles[0].length - 1], c(MOON, 2));
 });
 
-test('13 on a pile busts the whole pile into the discard', () => {
-  const s = mk({ piles: [[c(SUN, 3), c(BLOOM, 5), c(MOON, 2)]], hands: [[c(THORN, 13)], []] });
+test('tuck on an empty pile is illegal', () => {
+  const s = mk({ piles: [[]], hands: [[c(SUN, 2)], []] });
+  assert.equal(canPlay(s, c(SUN, 2), 0, 'tuck'), false);
+  assert.equal(canPlay(s, c(SUN, 2), 0, 'cover'), true);
+});
+
+test('13 on top busts the whole pile into the discard; tucked 13 is inert', () => {
+  const s = mk({ piles: [[c(SUN, 3), c(BLOOM, 5), c(MOON, 2)], [c(SUN, 9), c(SUN, 8)]], hands: [[c(THORN, 13), c(MOON, 13)], []] });
   const r = playCard(s, c(THORN, 13), 0, 'cover');
   assert.ok(r.ok);
   assert.deepEqual(s.piles[0], []);
   assert.equal(s.discard.length, 4);
   assert.ok(r.events.some((e) => e.t === 'bust' && e.force === THORN));
+  const r2 = playCard(s, c(MOON, 13), 1, 'tuck');
+  assert.ok(r2.ok);
+  assert.deepEqual(s.piles[1], [c(SUN, 9), c(MOON, 13), c(SUN, 8)]);
+  assert.equal(s.discard.length, 4);
 });
 
-test('a 13 may start an empty pile (base), and a card played on it hides it without busting', () => {
-  const s = mk({ piles: [[]], hands: [[c(SUN, 13), c(BLOOM, 4)], []] });
+test('a 13 may start an empty pile (base) but cannot be tucked there', () => {
+  const s = mk({ piles: [[]], hands: [[c(SUN, 13), c(BLOOM, 13)], []] });
+  assert.equal(canPlay(s, c(SUN, 13), 0, 'tuck'), false);
   assert.ok(playCard(s, c(SUN, 13), 0, 'cover').ok);
   assert.deepEqual(s.piles[0], [c(SUN, 13)]);
-  assert.ok(playCard(s, c(BLOOM, 4), 0, 'cover').ok);
-  assert.deepEqual(s.piles[0], [c(SUN, 13), c(BLOOM, 4)]);
-  assert.equal(s.discard.length, 0);
 });
 
 test('end of turn: 13 left on top is illegal; covering it makes it legal', () => {
   const s = mk({ piles: [[]], hands: [[c(SUN, 13), c(SUN, 6)], []] });
   playCard(s, c(SUN, 13), 0, 'cover');
-  playCard(s, c(SUN, 6), 3, 'cover');
+  playCard(s, c(SUN, 6), 3, 'tuck');
   assert.equal(previewEnd(s).legal, false);
   assert.equal(previewEnd(s).reason, 'force-on-top');
   const s2 = mk({ piles: [[]], hands: [[c(SUN, 13), c(SUN, 6)], []] });
@@ -165,7 +173,7 @@ test('applyFull never mutates its inputs', () => {
   const lb = new Array(8).fill(0); const done = [0, 0];
   const snap = JSON.stringify([piles, lb, done]);
   applyFull(piles, lb, done, c(MOON, 13), 0, 'cover');
-  applyFull(piles, lb, done, c(MOON, 5), 1, 'cover');
+  applyFull(piles, lb, done, c(MOON, 5), 1, 'tuck');
   assert.equal(JSON.stringify([piles, lb, done]), snap);
 });
 

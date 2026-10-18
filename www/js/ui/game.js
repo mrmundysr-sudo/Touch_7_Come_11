@@ -37,6 +37,7 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
   let busy = true;
   let paused = false;
   let sel = null;         // selected hand card id
+  let mode = 'cover';
   let undo = [];
   let turnStartSnap = null;
   let handEls = new Map();
@@ -59,6 +60,10 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
 
   $('#btnUndo').textContent = T.undo;
   $('#btnEnd').textContent = T.endTurn;
+  $$('#modeToggle button').forEach((b) => {
+    b.textContent = T[b.dataset.mode];
+    b.addEventListener('click', () => { Sound.sfx('tap'); setMode(b.dataset.mode); });
+  });
   btnEnd.addEventListener('click', () => onEnd());
   btnUndo.addEventListener('click', () => onUndo());
   $('#btnMenu').addEventListener('click', () => { Sound.sfx('tap'); onOpenSheet(); });
@@ -203,18 +208,25 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
   function updateHints() {
     for (let i = 0; i < 8; i++) {
       const slot = slots[i];
-      slot.classList.remove('can', 'cover', 'bust', 'hover');
+      slot.classList.remove('can', 'cover', 'tuck', 'bust', 'hover');
       const old = slot.querySelector('.hintTag');
       if (old) old.remove();
     }
     if (sel == null || busy || !S || S.over || S.turn !== 0) return;
     for (const t of playTargets(S, sel)) {
       const slot = slots[t.pile];
-      const willBust = is13(sel) && (S.piles[t.pile].length > 0);
-      slot.classList.add('can', willBust ? 'bust' : 'cover');
-      const tag = el('div', 'hintTag', willBust ? (S.lb[t.pile] ? T.bust + '!' : T.bust) : (is13(sel) && !S.piles[t.pile].length ? T.base : T.cover));
+      const m = t.modes.includes(mode) ? mode : t.modes[0];
+      const willBust = is13(sel) && m === 'cover' && (S.piles[t.pile].length > 0);
+      slot.classList.add('can', willBust ? 'bust' : m);
+      slot._mode = m;
+      const tag = el('div', 'hintTag', willBust ? (S.lb[t.pile] ? T.bust + '!' : T.bust) : (is13(sel) && m === 'cover' && !S.piles[t.pile].length ? T.base : T[m]));
       slot.appendChild(tag);
     }
+  }
+  function setMode(m) {
+    mode = m;
+    $$('#modeToggle button').forEach((b) => b.classList.toggle('on', b.dataset.mode === m));
+    updateHints();
   }
   function setStatus(t, pulse = false) {
     statusEl.textContent = t;
@@ -252,12 +264,12 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
   }
 
   // ---------- effects ----------
-  function fly(id, from, to, { down = false, flip = false, ms = 440 } = {}) {
+  function fly(id, from, to, { down = false, flip = false, tuck = false, ms = 440 } = {}) {
     const c = cardEl(id, { down });
     c.style.cssText = `--cw:${from.width}px;left:${from.left}px;top:${from.top}px;z-index:5`;
     fxEl.appendChild(c);
     const dx = to.left + (to.width - from.width) / 2 - from.left;
-    const dy = to.top + (to.height - from.height) / 2 - from.top;
+    const dy = to.top + (to.height - from.height) / 2 - from.top + (tuck ? -from.width * 0.1 : 0);
     const sc = to.width / from.width;
     const rot = (Math.random() * 10 - 5).toFixed(1);
     const a = c.animate([
@@ -305,8 +317,9 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     const bust = events.find((e) => e.t === 'bust');
     const unseal = events.find((e) => e.t === 'unseal');
     Sound.sfx(who === 1 ? 'swoosh' : 'place', { gain: 0.7 });
-    const clone = await fly(place.card, from, slotRect(place.pile), { flip: who === 1 });
+    const clone = await fly(place.card, from, slotRect(place.pile), { flip: who === 1, tuck: place.mode === 'tuck' });
     if (t !== token) { clone.remove(); return; }
+    if (place.mode === 'tuck') { Sound.sfx('tuck'); Haptics.pulse(12); }
     else if (!bust) { Sound.sfx('place'); Haptics.pulse(10); }
     if (bust) {
       bustFx(place.pile, bust.force);
@@ -394,7 +407,7 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     undo = [];
     turnStartSnap = snapshot(S);
     sel = null;
-    updateHints();
+    setMode(mode);
     Sound.sfx('yourTurn');
     refreshControls();
     if (S.hands[0].length === 1) select(S.hands[0][0]);
@@ -425,8 +438,9 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     tryPlay(sel, i);
   }
   function tryPlay(card, pile) {
-    const m = 'cover';
-    if (!canPlay(S, card, pile, m)) {
+    const modes = mode === 'cover' ? ['cover', 'tuck'] : ['tuck', 'cover'];
+    const m = modes.find((x) => canPlay(S, card, pile, x));
+    if (!m) {
       Sound.sfx('error');
       Haptics.pulse([20, 30, 20]);
       slots[pile].classList.add('err');

@@ -136,7 +136,7 @@ img{-webkit-user-drag:none}
   display:flex;align-items:center;justify-content:center;font-family:var(--display);font-size:.34em;color:rgba(232,184,74,.7);box-shadow:inset 0 0 .15em rgba(0,0,0,.6)}
 .slot .empty::before{content:'';position:absolute;inset:.12em;border-radius:50%;border:.012em solid rgba(232,184,74,.35)}
 .slot.can::after{content:'';position:absolute;inset:-.05em;border-radius:.1em;pointer-events:none;box-shadow:0 0 .22em .05em var(--glow,#ffd45a),inset 0 0 .12em var(--glow,#ffd45a);animation:glow 1.1s ease-in-out infinite;z-index:4}
-.slot.can.cover{--glow:#ffd45a}.slot.can.bust{--glow:#ff5a4a}
+.slot.can.cover{--glow:#ffd45a}.slot.can.tuck{--glow:#7fb4ff}.slot.can.bust{--glow:#ff5a4a}
 .slot.hover{transform:translateY(-.08em) scale(1.05)}
 @keyframes glow{0%,100%{opacity:.55}50%{opacity:1}}
 .slot .hintTag{position:absolute;left:50%;top:-.2em;transform:translateX(-50%);font-family:var(--caps);font-size:.13em;letter-spacing:.1em;padding:.15em .6em;border-radius:1em;background:#150f35;color:var(--glow);border:1px solid var(--glow);text-transform:uppercase;z-index:5;white-space:nowrap}
