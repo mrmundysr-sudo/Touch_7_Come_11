@@ -4,9 +4,11 @@
 //   - winning by sealing both targets:                      2
 //   - winning when the deck runs dry:                       1
 //   - losing a seal-out game while still holding one seal:  1 (a consolation point)
-//   - a drawn game, or a deck-out loss:                     0
-// A player who ends their own turn with both targets sealed wins on the spot, so the loser of a seal-out game
-// holds at most one seal.
+//   - both players sealed out (opener + reply turn):        2 each
+//   - a deck-out draw, or a deck-out loss:                  0
+// A player who ends their own turn with both targets sealed wins on the spot - unless they opened the round, in which
+// case the other player gets one last turn: matching the seal-out draws the round (2 each), and a Force that breaks
+// a seal cancels the win and play goes on. So the loser of a seal-out game holds at most one seal.
 //
 // The match ends when someone has reached the target and leads. If both reach it in the same game, the higher total
 // wins; if they are level, play goes on (sudden death) until one player is ahead. The player who opens the first
@@ -15,7 +17,7 @@
 import { POP } from './core.js';
 
 export const TARGETS = [7, 11];
-export const POINTS = { seals: 2, deck: 1, draw: 0, consolation: 1 };
+export const POINTS = { seals: 2, deck: 1, draw: 0, consolation: 1, double: 2 };
 
 /** @param {{target?: number, first?: 0|1}} opts first = who opens game 1 (0 = you, 1 = the foe). */
 export function newMatch({ target = 11, first = 0 } = {}) {
@@ -37,6 +39,7 @@ export function newMatch({ target = 11, first = 0 } = {}) {
  */
 export function pointsFor(game) {
   const pts = [0, 0];
+  if (game.endReason === 'double') return [POINTS.double, POINTS.double]; // both sealed out: 2 each
   if (game.winner !== 0 && game.winner !== 1) return pts;
   const w = game.winner;
   const l = 1 - w;

@@ -223,6 +223,7 @@ function showResult(r) {
   $('#resTitle').textContent = match && match.over ? (match.winner === 0 ? R.matchWin : R.matchLose) : draw ? R.draw : win ? R.win : R.lose;
   let sub = '';
   if (r.reason === 'deck') sub = draw ? text.game.drawDeck : win ? text.game.youWinDeck : text.game.youLoseDeck;
+  else if (r.reason === 'double') sub = text.game.doubleSeal;
   $('#resSub').textContent = sub;
   if (match) {
     const pts = match.history[match.history.length - 1].points;

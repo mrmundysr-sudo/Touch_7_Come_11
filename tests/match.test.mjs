@@ -195,3 +195,25 @@ test('AI mirror matches to 7 and 11 always finish; report round counts and sudde
     console.log(`  to ${target}: avg ${(rounds / n).toFixed(1)} rounds, longest ${longest}, sudden-death rounds ${sudden}, consolation points ${consolations}`);
   }
 });
+
+test('a double seal-out (opener + matching reply) scores 2 each, whoever opened', () => {
+  assert.deepEqual(pointsFor({ winner: null, endReason: 'double' }), [2, 2]);
+  assert.deepEqual(pointsFor({ winner: null, endReason: 'double', done: [3, 3] }), [2, 2]);
+  const m = newMatch({ target: 7, first: 0 });
+  recordGame(m, { winner: null, endReason: 'double' });
+  assert.deepEqual(m.scores, [2, 2]);
+  assert.equal(m.games, 1);
+  assert.equal(m.nextFirst, 1, 'the opener still alternates');
+  assert.equal(m.over, false);
+});
+
+test('double seal-outs can leave the match level at the target: sudden death, then a lead wins', () => {
+  const m = newMatch({ target: 7, first: 0 });
+  for (let i = 0; i < 4; i++) recordGame(m, { winner: null, endReason: 'double' });
+  assert.deepEqual(m.scores, [8, 8]);
+  assert.equal(m.over, false);
+  assert.equal(m.suddenDeath, true);
+  recordGame(m, { winner: 1, endReason: 'seals', done: [0, 3] });
+  assert.equal(m.over, true);
+  assert.equal(m.winner, 1);
+});

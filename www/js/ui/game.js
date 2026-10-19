@@ -414,6 +414,9 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     if (S.over) setStatus('');
     else if (S.turn !== 0) setStatus(fmt(T.foeThinks, { name: foe.short }), true);
     else if (busy) setStatus(T.yourMove);
+    else if (S.finalTurn && n > 0) setStatus(fmt(T.finalCastN, { n }), false);
+    else if (S.finalTurn && S.done[0] !== 3) setStatus(T.finalReady, true);
+    else if (S.finalTurn) setStatus(S.done[1] === 3 ? T.readyDouble : T.readyWin, true);
     else if (n > 1) setStatus(fmt(T.castN, { n }), false);
     else if (n === 1) setStatus(T.castOne);
     else setStatus(S.done[0] === 3 ? T.readyWin : T.readyEnd, true);
@@ -663,6 +666,15 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
           Sound.sfx('draw', { gain: 0.6 });
           await tick(250);
         }
+      } else if (ev.t === 'finalTurn') {
+        renderCoins();
+        toast(ev.player === 0 ? fmt(T.finalFoe, { name: foe.short }) : fmt(T.finalFoeYours, { name: foe.short }), false, 2600);
+        await tick(1200);
+      } else if (ev.t === 'winCancelled') {
+        renderAll();
+        Sound.sfx('unseal');
+        toast(T.winCancelled, false, 2400);
+        await tick(1000);
       } else if (ev.t === 'gameover') {
         await finish(ev, t);
         return;
@@ -748,7 +760,7 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     else if (winner === 1) { setMood('happy', 0); banter('win', { force: true }); }
     else banter('draw', { force: true });
     renderAll();
-    if (ev.reason === 'seals') lightSlots([0, 1, 2, 3, 4, 5, 6, 7].filter((i) => S.lb[i]), 'sealing');
+    if (ev.reason === 'seals' || ev.reason === 'double') lightSlots([0, 1, 2, 3, 4, 5, 6, 7].filter((i) => S.lb[i]), 'sealing');
     await tick(2300);
     if (t !== token) return;
     onGameOver({

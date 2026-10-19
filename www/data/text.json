@@ -19,7 +19,7 @@
   "settings": "Charms",
   "tapHint": "Tap a card to choose",
   "target": "Play To",
-  "targetNote": "First to {n}. Seal both: 2. Deck win: 1. A lone seal on a loss: 1."
+  "targetNote": "First to {n}. Seal both: 2. Deck win: 1. A lone seal on a loss: 1. Both seal out: 2 each."
  },
  "difficulty": {
   "beginner": {
@@ -102,7 +102,15 @@
   "targets": "Targets",
   "seven": "7",
   "eleven": "11",
-  "scoreChip": "{a} – {b}"
+  "scoreChip": "{a} – {b}",
+  "finalCastN": "Last turn — cast {n} more",
+  "finalReady": "Last turn — end your turn",
+  "readyDouble": "Both sealed — end your turn to draw",
+  "finalYou": "Last turn! Match their seals or break one.",
+  "finalFoe": "{name} sealed out — you may reply once!",
+  "finalFoeYours": "You sealed out — {name} gets one last turn.",
+  "winCancelled": "A seal was broken — the duel goes on!",
+  "doubleSeal": "Both sealed out — a draw, 2 points each."
  },
  "result": {
   "win": "The stars are yours",
@@ -167,6 +175,7 @@
      "Whenever two of your piles add to <b>7</b> or <b>11</b>, tap <b>Seals</b> to <b>lock</b> them. An empty pile counts as 0.",
      "On your own turn you can lock and <b>unlock</b> as often as you like. Unlocking frees your piles so you can play on them again.",
      "You win if both the 7 and the 11 are locked when your turn ends.",
+     "<b>Opening player:</b> if you opened the round and seal both, your opponent gets <b>one last turn</b>. If they seal both too, it is a draw. If a Force breaks one of your seals, your win is cancelled and play goes on.",
      "Locked piles are frozen — except to a Force, which can shatter one and free its partner.",
      "Never end a turn with an empty pile of your own, unless it is locked."
     ]
@@ -175,7 +184,7 @@
     "h": "The Match",
     "b": [
      "A duel is played over several rounds, as a race to <b>7</b> or <b>11</b> points. Pick which on the menu.",
-     "Seal both targets to win a round for <b>2</b> points. If the deck runs dry, the player who is closer wins it for <b>1</b>. A draw scores nothing.",
+     "Seal both targets to win a round for <b>2</b> points. If both players seal out, each takes <b>2</b>. If the deck runs dry, the player who is closer wins it for <b>1</b>. A deck-out draw scores nothing.",
      "Lose a round while still holding <b>one</b> seal and you take <b>1</b> point anyway.",
      "If both players pass the target in the same round, the higher total wins. If you are level, play on until someone leads.",
      "You choose who opens the first round. After that the opener switches every round."

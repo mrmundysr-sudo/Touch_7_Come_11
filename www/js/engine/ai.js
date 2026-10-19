@@ -29,7 +29,9 @@ function evalBoard(piles, lb, done, p, prm) {
     if (topIs13(piles[i])) pen += 4;
     if (!piles[i].length) oppEmpty++;
   }
-  return -od + prm.wOpp * pd + prm.ownSeal * POP[done[p]] - prm.oppSeal * POP[done[q]] - pen + prm.forceRefill * oppEmpty;
+  // Reply turn: the opponent has already sealed out and wins unless a seal is broken or matched.
+  const replyBreak = prm.replying && done[q] !== 3 ? 60 : 0;
+  return -od + prm.wOpp * pd + prm.ownSeal * POP[done[p]] - prm.oppSeal * POP[done[q]] - pen + prm.forceRefill * oppEmpty + replyBreak;
 }
 
 /** Pick the best legal set of locks to finish the turn with (nothing, one pair, or both pairs) and score it. */
@@ -44,7 +46,7 @@ function scoreFinal(piles, lb, done, p, prm) {
       nd[p] |= o.bit;
     }
     if (!endLegality(piles, lb, done, p, sealed).legal) continue;
-    if (nd[p] === 3) return { score: 1e6, locks };
+    if (nd[p] === 3) return { score: 1e6 + (nd[1 - p] === 3 ? 0 : 1000), locks }; // sealing out beats drawing on a reply turn
     const s = evalBoard(piles, nlb, nd, p, prm);
     if (!best || s > best.score) best = { score: s, locks };
   }
@@ -76,6 +78,7 @@ export function planTurn(state, p, persona = DEFAULT_PERSONA, difficulty = 'prof
     oppSeal: persona.oppSeal * (diff.oppMul > 0.5 ? 1 : 0.4),
     ownSeal: persona.ownSeal,
     forceRefill: persona.forceRefill * diff.oppMul,
+    replying: !!state.finalTurn && state.done[1 - p] === 3,
   };
   const lockBreak = state.lockBreak;
   const hand = state.hands[p].slice();
