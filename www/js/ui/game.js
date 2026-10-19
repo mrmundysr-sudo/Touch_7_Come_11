@@ -752,7 +752,7 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     await tick(2300);
     if (t !== token) return;
     onGameOver({
-      winner, reason: ev.reason, foeId: foe.id,
+      winner, reason: ev.reason, foeId: foe.id, done: S.done.slice(),
       stats: { turns: S.turns[0], seals: S.stats.seals[0], busts: S.stats.busts[0] },
       line: winner === 0 ? pick(foe.banter.lose) : winner === 1 ? pick(foe.banter.win) : pick(foe.banter.draw),
     });

@@ -19,7 +19,7 @@
   "settings": "Charms",
   "tapHint": "Tap a card to choose",
   "target": "Play To",
-  "targetNote": "First to {n} points. Seal both for 2, win on the deck for 1."
+  "targetNote": "First to {n}. Seal both: 2. Deck win: 1. A lone seal on a loss: 1."
  },
  "difficulty": {
   "beginner": {
@@ -122,7 +122,10 @@
   "matchLose": "The match is theirs",
   "opensYou": "You open the next round",
   "opensFoe": "{name} opens the next round",
-  "you": "You"
+  "you": "You",
+  "suddenDeath": "Level — sudden death!",
+  "consolationYou": "Your held seal still earns a point.",
+  "consolationFoe": "{name}’s held seal still earns a point."
  },
  "rules": {
   "title": "How to Play",
@@ -173,6 +176,8 @@
     "b": [
      "A duel is played over several rounds, as a race to <b>7</b> or <b>11</b> points. Pick which on the menu.",
      "Seal both targets to win a round for <b>2</b> points. If the deck runs dry, the player who is closer wins it for <b>1</b>. A draw scores nothing.",
+     "Lose a round while still holding <b>one</b> seal and you take <b>1</b> point anyway.",
+     "If both players pass the target in the same round, the higher total wins. If you are level, play on until someone leads.",
      "You choose who opens the first round. After that the opener switches every round."
     ]
    }

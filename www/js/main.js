@@ -210,7 +210,7 @@ function setAgainButton(midMatch) {
 function showResult(r) {
   const R = text.result;
   const foeName = chars[r.foeId].name.split(' ')[0]; // first name keeps the score line short
-  if (match) recordGame(match, { winner: r.winner, endReason: r.reason });
+  if (match) recordGame(match, { winner: r.winner, endReason: r.reason, done: r.done });
   const midMatch = !!match && !match.over;
   const win = r.winner === 0;
   const draw = r.winner === null;
@@ -226,10 +226,15 @@ function showResult(r) {
   $('#resSub').textContent = sub;
   if (match) {
     const pts = match.history[match.history.length - 1].points;
-    const gained = pts[0] || pts[1];
+    const parts = [];
+    if (pts[0]) parts.push(fmt(R.points, { who: R.you, n: pts[0] }));
+    if (pts[1]) parts.push(fmt(R.points, { who: foeName, n: pts[1] }));
     $('#resScore').textContent = fmt(R.score, { a: match.scores[0], b: match.scores[1], name: foeName });
-    $('#resNext').textContent = `${gained ? fmt(R.points, { who: pts[0] ? R.you : foeName, n: gained }) : R.noPoints} · ${fmt(R.toTarget, { n: match.target })}`;
+    $('#resNext').textContent = `${parts.length ? parts.join(' · ') : R.noPoints} · ${match.suddenDeath ? R.suddenDeath : fmt(R.toTarget, { n: match.target })}`;
     $('#resOpen').textContent = midMatch ? (match.nextFirst === 0 ? R.opensYou : fmt(R.opensFoe, { name: foeName })) : '';
+    // the consolation point, explained
+    const lone = r.reason === 'seals' && pts[1 - r.winner] > 0;
+    if (lone) $('#resSub').textContent = r.winner === 0 ? fmt(R.consolationFoe, { name: foeName }) : R.consolationYou;
     if (match.over) Store.addResult(sel.opponent, sel.difficulty, match.winner === 0 ? 'w' : 'l');
   } else { $('#resScore').textContent = ''; $('#resNext').textContent = ''; $('#resOpen').textContent = ''; }
   setAgainButton(midMatch);
