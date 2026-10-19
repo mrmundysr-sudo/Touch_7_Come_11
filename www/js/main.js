@@ -95,7 +95,7 @@ function buildMenu() {
   m.appendChild(el('div', 'vignette'));
   const inner = el('div', 'menu-inner');
   inner.innerHTML = `
-    <div class="m-title"><h1>Touch 7<br>Come 11</h1><p>${M.title}</p></div>
+    <div class="m-title"><h1>Touch 7 <br>Come 11</h1><p>${M.title}</p></div>
     <div class="m-label">${M.opponent}</div>
     <div class="holder opp" id="oppHolder"></div>
     <div class="m-blurb" id="oppBlurb"></div>
@@ -108,9 +108,10 @@ function buildMenu() {
       <button class="btn gold big" id="btnBegin">${M.begin}</button>
       <div class="m-links"><button class="btn ghost" id="btnHow">${M.how}</button></div>
       <div class="m-rec" id="rec"></div>
-    </div>
-    <div class="handle" id="menuHandle"><i></i></div>`;
+    </div>`;
   m.appendChild(inner);
+  // outside the scrolling column, so the swipe-up grip stays pinned to the bottom of the screen
+  m.insertAdjacentHTML('beforeend', '<div class="handle" id="menuHandle"><i></i></div>');
   Art.bind(m);
 
   const oh = $('#oppHolder');
