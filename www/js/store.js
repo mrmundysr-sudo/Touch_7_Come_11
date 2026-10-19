@@ -2,7 +2,7 @@
 const KEY = 't7c11.v1';
 const defaults = {
   sfx: 0.9, music: 0.7, vibration: true, banter: true, lockBreak: true,
-  opponent: 'witch', difficulty: 'experienced', first: 'fate', record: {}, seenRules: false,
+  opponent: 'witch', difficulty: 'experienced', first: 'fate', target: 11, record: {}, seenRules: false,
 };
 let data = { ...defaults };
 try { Object.assign(data, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { /* no storage: run in memory */ }

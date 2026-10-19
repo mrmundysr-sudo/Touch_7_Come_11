@@ -744,8 +744,6 @@ export function createGame({ text, chars, onGameOver, onOpenSheet }) {
     busy = true;
     refreshControls();
     const winner = ev.winner;
-    const res = winner === 0 ? 'w' : winner === 1 ? 'l' : 'd';
-    Store.addResult(cfg.opponent, cfg.difficulty, res);
     if (winner === 0) { setMood('defeated', 0); banter('lose', { force: true }); }
     else if (winner === 1) { setMood('happy', 0); banter('win', { force: true }); }
     else banter('draw', { force: true });

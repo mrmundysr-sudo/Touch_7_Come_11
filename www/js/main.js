@@ -5,13 +5,15 @@ import { Store } from './store.js';
 import { $, $$, el, fmt, getJSON, wait } from './util.js';
 import { installSprite, iconSvg } from './ui/cardview.js';
 import { createGame } from './ui/game.js';
+import { newMatch, recordGame, pointsFor, TARGETS } from './engine/match.js';
 
 const screens = { splash: $('#splash'), menu: $('#menu'), game: $('#game'), result: $('#result') };
 let text; let chars; let game;
 let current = 'splash';
+let match = null; // the match in progress: a race to 7 or 11 points over several games
 let sheetOpen = false;
 let sheetContext = 'menu';
-const sel = { opponent: Store.get('opponent'), difficulty: Store.get('difficulty'), first: Store.get('first') };
+const sel = { opponent: Store.get('opponent'), difficulty: Store.get('difficulty'), first: Store.get('first'), target: Store.get('target') };
 
 function show(name) {
   current = name;
@@ -99,6 +101,8 @@ function buildMenu() {
     <div class="m-blurb" id="oppBlurb"></div>
     <div class="m-label">${M.difficulty}</div>
     <div class="holder diff" id="diffHolder"></div>
+    <div class="m-first"><div class="m-label">${M.target}</div><div class="seg" id="targetSeg"></div></div>
+    <div class="m-blurb" id="targetNote"></div>
     <div class="m-first"><div class="m-label">${M.first}</div><div class="seg" id="firstSeg"></div></div>
     <div class="m-actions">
       <button class="btn gold big" id="btnBegin">${M.begin}</button>
@@ -135,7 +139,14 @@ function buildMenu() {
     b.addEventListener('click', () => { Sound.sfx('tap'); sel.first = f; Store.set('first', f); refreshMenu(); });
     fs.appendChild(b);
   }
-  $('#btnBegin').addEventListener('click', startGame);
+  const ts = $('#targetSeg');
+  for (const n of TARGETS) {
+    const b = el('button', '', String(n));
+    b.dataset.id = String(n);
+    b.addEventListener('click', () => { Sound.sfx('tap'); sel.target = n; Store.set('target', n); refreshMenu(); });
+    ts.appendChild(b);
+  }
+  $('#btnBegin').addEventListener('click', startMatch);
   $('#btnHow').addEventListener('click', () => { Sound.sfx('tap'); openRules(); });
   attachSwipe($('#menuHandle'), () => openSheet('menu'));
   refreshMenu();
@@ -144,20 +155,36 @@ function refreshMenu() {
   $$('#oppHolder .ocard').forEach((b) => b.classList.toggle('on', b.dataset.id === sel.opponent));
   $$('#diffHolder .dcard').forEach((b) => b.classList.toggle('on', b.dataset.id === sel.difficulty));
   $$('#firstSeg button').forEach((b) => b.classList.toggle('on', b.dataset.id === sel.first));
+  $$('#targetSeg button').forEach((b) => b.classList.toggle('on', +b.dataset.id === sel.target));
+  $('#targetNote').textContent = fmt(text.menu.targetNote, { n: sel.target });
   const c = chars[sel.opponent];
   $('#oppBlurb').textContent = `“${c.tagline}”`;
   const r = Store.getRecord(sel.opponent, sel.difficulty);
   $('#rec').textContent = `${text.menu.record}: ${r.w} ${text.menu.wins} · ${r.l} ${text.menu.losses}${r.d ? ` · ${r.d} ${text.menu.draws}` : ''}`;
 }
 
-async function startGame() {
+// A new match: you choose who opens the first round (Fate = coin flip); after that the opener alternates.
+async function startMatch() {
+  const first = sel.first === 'me' ? 0 : sel.first === 'foe' ? 1 : (Math.random() < 0.5 ? 0 : 1);
+  match = newMatch({ target: sel.target, first });
+  await beginRound();
+}
+
+async function beginRound() {
   Sound.unlock();
   Sound.sfx('tap');
   Haptics.pulse(15);
   if (!Store.get('seenRules')) { Store.set('seenRules', true); await openRules(true); }
+  paintScoreChip();
   show('game');
   game.setPaused(false);
-  game.begin({ opponent: sel.opponent, difficulty: sel.difficulty, first: sel.first });
+  game.begin({ opponent: sel.opponent, difficulty: sel.difficulty, first: match.nextFirst === 0 ? 'me' : 'foe' });
+}
+
+function paintScoreChip() {
+  const chip = $('#matchChip');
+  chip.textContent = match ? fmt(text.game.scoreChip, { a: match.scores[0], b: match.scores[1] }) : '';
+  chip.title = match ? fmt(text.result.toTarget, { n: match.target }) : '';
 }
 
 // ---------------------------------------------------------------- result
@@ -166,11 +193,24 @@ function buildResult() {
   const ab = $('#btnAgain');
   if (Art.has('ui.playAgain')) { ab.style.backgroundImage = `url("${Art.url('ui.playAgain')}")`; ab.setAttribute('aria-label', text.result.playAgain); }
   else { ab.classList.add('noart'); ab.textContent = text.result.playAgain; }
-  ab.addEventListener('click', () => { Sound.sfx('tap'); startGame(); });
-  $('#btnToMenu').addEventListener('click', () => { Sound.sfx('tap'); refreshMenu(); show('menu'); });
+  ab.dataset.hasArt = Art.has('ui.playAgain') ? '1' : '';
+  ab.addEventListener('click', () => { Sound.sfx('tap'); if (match && !match.over) beginRound(); else startMatch(); });
+  $('#btnToMenu').addEventListener('click', () => { Sound.sfx('tap'); match = null; refreshMenu(); show('menu'); });
+}
+// "Play Again" art only fits a fresh match; between rounds the button is a plain "Next Round".
+function setAgainButton(midMatch) {
+  const ab = $('#btnAgain');
+  const useArt = ab.dataset.hasArt === '1' && !midMatch;
+  ab.classList.toggle('noart', !useArt);
+  ab.style.backgroundImage = useArt ? `url("${Art.url('ui.playAgain')}")` : '';
+  ab.textContent = useArt ? '' : midMatch ? text.result.nextRound : text.result.playAgain;
+  ab.setAttribute('aria-label', midMatch ? text.result.nextRound : text.result.playAgain);
 }
 function showResult(r) {
   const R = text.result;
+  const foeName = chars[r.foeId].name.split(' ')[0]; // first name keeps the score line short
+  if (match) recordGame(match, { winner: r.winner, endReason: r.reason });
+  const midMatch = !!match && !match.over;
   const win = r.winner === 0;
   const draw = r.winner === null;
   const bgSlot = win || draw ? 'result.win.background' : 'result.loss.background';
@@ -179,10 +219,19 @@ function showResult(r) {
   const banSlot = win ? 'result.win.banner' : 'result.loss.banner';
   const ban = $('#resBanner');
   if (!draw && Art.has(banSlot)) { ban.src = Art.url(banSlot); ban.style.display = ''; } else { ban.removeAttribute('src'); ban.style.display = 'none'; }
-  $('#resTitle').textContent = draw ? R.draw : win ? R.win : R.lose;
+  $('#resTitle').textContent = match && match.over ? (match.winner === 0 ? R.matchWin : R.matchLose) : draw ? R.draw : win ? R.win : R.lose;
   let sub = '';
   if (r.reason === 'deck') sub = draw ? text.game.drawDeck : win ? text.game.youWinDeck : text.game.youLoseDeck;
   $('#resSub').textContent = sub;
+  if (match) {
+    const pts = match.history[match.history.length - 1].points;
+    const gained = pts[0] || pts[1];
+    $('#resScore').textContent = fmt(R.score, { a: match.scores[0], b: match.scores[1], name: foeName });
+    $('#resNext').textContent = `${gained ? fmt(R.points, { who: pts[0] ? R.you : foeName, n: gained }) : R.noPoints} · ${fmt(R.toTarget, { n: match.target })}`;
+    $('#resOpen').textContent = midMatch ? (match.nextFirst === 0 ? R.opensYou : fmt(R.opensFoe, { name: foeName })) : '';
+    if (match.over) Store.addResult(sel.opponent, sel.difficulty, match.winner === 0 ? 'w' : 'l');
+  } else { $('#resScore').textContent = ''; $('#resNext').textContent = ''; $('#resOpen').textContent = ''; }
+  setAgainButton(midMatch);
   $('#resStats').textContent = fmt(R.stats, { t: r.stats.turns, s: r.stats.seals, f: r.stats.busts });
   const mood = win ? 'defeated' : draw ? 'neutral' : 'happy';
   $('#resFoe').src = Art.charUrl(r.foeId, mood) || '';
@@ -236,7 +285,7 @@ function buildSheet() {
   sw('#swLock', 'lockBreak');
   $('#shResume').addEventListener('click', () => { Sound.sfx('tap'); closeSheet(); });
   $('#shRules').addEventListener('click', () => { Sound.sfx('tap'); openRules(); });
-  $('#shLeave').addEventListener('click', () => { Sound.sfx('tap'); closeSheet(); game.abort(); show('menu'); });
+  $('#shLeave').addEventListener('click', () => { Sound.sfx('tap'); closeSheet(); game.abort(); match = null; show('menu'); });
   $('#scrim').addEventListener('click', closeSheet);
   attachSwipe($('#gameHandle'), () => openSheet('game'));
   // drag the sheet down to close

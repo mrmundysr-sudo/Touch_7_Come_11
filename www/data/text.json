@@ -17,7 +17,9 @@
   "losses": "losses",
   "draws": "draws",
   "settings": "Charms",
-  "tapHint": "Tap a card to choose"
+  "tapHint": "Tap a card to choose",
+  "target": "Play To",
+  "targetNote": "First to {n} points. Seal both for 2, win on the deck for 1."
  },
  "difficulty": {
   "beginner": {
@@ -99,7 +101,8 @@
   "drawDeck": "The deck ran dry — dead even.",
   "targets": "Targets",
   "seven": "7",
-  "eleven": "11"
+  "eleven": "11",
+  "scoreChip": "{a} – {b}"
  },
  "result": {
   "win": "The stars are yours",
@@ -108,7 +111,18 @@
   "playAgain": "Play Again",
   "menu": "Main Menu",
   "stats": "Turns {t} · Seals {s} · Forces {f}",
-  "bannerDraw": "A Draw!"
+  "bannerDraw": "A Draw!",
+  "nextRound": "Next Round",
+  "newMatch": "New Match",
+  "points": "{who} +{n}",
+  "noPoints": "No points this round",
+  "score": "You {a} – {b} {name}",
+  "toTarget": "First to {n}",
+  "matchWin": "The match is yours",
+  "matchLose": "The match is theirs",
+  "opensYou": "You open the next round",
+  "opensFoe": "{name} opens the next round",
+  "you": "You"
  },
  "rules": {
   "title": "How to Play",
@@ -152,6 +166,14 @@
      "You win if both the 7 and the 11 are locked when your turn ends.",
      "Locked piles are frozen — except to a Force, which can shatter one and free its partner.",
      "Never end a turn with an empty pile of your own, unless it is locked."
+    ]
+   },
+   {
+    "h": "The Match",
+    "b": [
+     "A duel is played over several rounds, as a race to <b>7</b> or <b>11</b> points. Pick which on the menu.",
+     "Seal both targets to win a round for <b>2</b> points. If the deck runs dry, the player who is closer wins it for <b>1</b>. A draw scores nothing.",
+     "You choose who opens the first round. After that the opener switches every round."
     ]
    }
   ]
