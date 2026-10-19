@@ -1,6 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { newMatch, recordGame, pointsFor, TARGETS } from '../www/js/engine/match.js';
+import { seeded } from '../www/js/engine/cards.js';
+import { newGame, endTurn, previewEnd, forceLegal, runStep } from '../www/js/engine/rules.js';
+import { planTurn } from '../www/js/engine/ai.js';
 
 const sealWin = (w) => ({ winner: w, endReason: 'seals' });
 const deckWin = (w) => ({ winner: w, endReason: 'deck' });
@@ -85,4 +88,110 @@ test('history keeps who opened each game', () => {
   recordGame(m, deckWin(1));
   assert.deepEqual(m.history.map((h) => h.first), [1, 0]);
   assert.deepEqual(m.history.map((h) => h.points), [[2, 0], [0, 1]]);
+});
+
+// ---- consolation point: a seal-out loser who still holds one seal gets 1 point ----
+const SEVEN = 1, ELEVEN = 2;
+const sealOut = (w, done) => ({ winner: w, endReason: 'seals', done });
+
+test('seal-out loss with one seal held earns the loser 1 point; with none it earns 0', () => {
+  assert.deepEqual(pointsFor(sealOut(0, [3, SEVEN])), [2, 1]);
+  assert.deepEqual(pointsFor(sealOut(0, [3, ELEVEN])), [2, 1]);
+  assert.deepEqual(pointsFor(sealOut(0, [3, 0])), [2, 0]);
+  assert.deepEqual(pointsFor(sealOut(1, [SEVEN, 3])), [1, 2]);
+  assert.deepEqual(pointsFor(sealOut(1, [0, 3])), [0, 2]);
+});
+
+test('the consolation point is capped at 1 and needs the done mask', () => {
+  assert.deepEqual(pointsFor(sealOut(0, [3, 3])), [2, 1]);
+  assert.deepEqual(pointsFor({ winner: 0, endReason: 'seals' }), [2, 0]);
+});
+
+test('deck-out games never give a consolation point, whatever is held', () => {
+  assert.deepEqual(pointsFor({ winner: 0, endReason: 'deck', done: [SEVEN, ELEVEN] }), [1, 0]);
+  assert.deepEqual(pointsFor({ winner: 1, endReason: 'deck', done: [SEVEN, SEVEN] }), [0, 1]);
+  assert.deepEqual(pointsFor({ winner: null, endReason: 'deck', done: [SEVEN, SEVEN] }), [0, 0]);
+});
+
+test('both players can score in the same game and the scores accumulate', () => {
+  const m = newMatch({ target: 11 });
+  recordGame(m, sealOut(0, [3, SEVEN]));
+  recordGame(m, sealOut(1, [ELEVEN, 3]));
+  recordGame(m, sealOut(0, [3, 0]));
+  assert.deepEqual(m.scores, [5, 3]);
+  assert.deepEqual(m.history.map((h) => h.points), [[2, 1], [1, 2], [2, 0]]);
+});
+
+test('both reaching the target in the same game: the higher total wins', () => {
+  const m = newMatch({ target: 7 });
+  m.scores = [6, 5];
+  recordGame(m, sealOut(0, [3, SEVEN])); // 8 - 6
+  assert.equal(m.over, true);
+  assert.equal(m.winner, 0);
+  assert.equal(m.suddenDeath, false);
+  const m2 = newMatch({ target: 7 });
+  m2.scores = [6, 5];
+  recordGame(m2, sealOut(1, [SEVEN, 3])); // 7 - 7 -> level
+  assert.equal(m2.over, false);
+});
+
+test('level at or past the target means sudden death until someone leads', () => {
+  const m = newMatch({ target: 7 });
+  m.scores = [6, 5];
+  recordGame(m, sealOut(1, [SEVEN, 3])); // 7 - 7
+  assert.equal(m.over, false);
+  assert.equal(m.suddenDeath, true);
+  recordGame(m, draw); // still level
+  assert.equal(m.over, false);
+  assert.equal(m.suddenDeath, true);
+  recordGame(m, deckWin(1)); // 7 - 8
+  assert.equal(m.over, true);
+  assert.equal(m.winner, 1);
+  assert.equal(m.suddenDeath, false);
+});
+
+test('a sudden-death round can be decided by the consolation point alone', () => {
+  const m = newMatch({ target: 7 });
+  m.scores = [6, 6];
+  recordGame(m, sealOut(0, [3, ELEVEN])); // 8 - 7
+  assert.equal(m.over, true);
+  assert.equal(m.winner, 0);
+});
+
+// ---- AI mirror matches: they always finish, and the round counts are sane ----
+function playRound(seed, first) {
+  const rng = seeded(seed);
+  const P = { wOpp: 0.6, oppSeal: 12, ownSeal: 12, forceRefill: 0 };
+  const g = newGame({ rng, first, lockBreak: true });
+  let guard = 0;
+  while (!g.over && guard++ < 400) {
+    const p = g.turn;
+    const { plan } = planTurn(g, p, P, 'professional', rng);
+    for (const m of plan) assert.ok(runStep(g, m).ok);
+    if (!previewEnd(g).legal) forceLegal(g);
+    assert.ok(endTurn(g, { rng, force: true }).ok);
+  }
+  assert.ok(g.over, 'round must finish');
+  return g;
+}
+
+test('AI mirror matches to 7 and 11 always finish; report round counts and sudden deaths', () => {
+  for (const target of [7, 11]) {
+    let rounds = 0, longest = 0, sudden = 0, consolations = 0, n = 40;
+    for (let k = 0; k < n; k++) {
+      const m = newMatch({ target, first: k % 2 });
+      let seed = 90000 + k * 100;
+      while (!m.over) {
+        assert.ok(m.games < 60, 'a match should not run away');
+        const g = playRound(seed++, m.nextFirst);
+        recordGame(m, { winner: g.winner, endReason: g.endReason, done: g.done });
+        if (m.suddenDeath) sudden++;
+      }
+      rounds += m.games; longest = Math.max(longest, m.games);
+      consolations += m.history.filter((h) => h.points[0] + h.points[1] === 3).length;
+      assert.ok(m.scores[m.winner] > m.scores[1 - m.winner], 'the winner leads');
+      assert.ok(m.scores[m.winner] >= target);
+    }
+    console.log(`  to ${target}: avg ${(rounds / n).toFixed(1)} rounds, longest ${longest}, sudden-death rounds ${sudden}, consolation points ${consolations}`);
+  }
 });
