@@ -21,7 +21,7 @@ export function newGame({ rng = Math.random, first = 'random', lockBreak = true 
     const turn = first === 'random' ? (rng() < 0.5 ? 0 : 1) : first;
     return {
       piles, lb, done, hands, deck, discard: [], turn, first: turn, plays: 0, turns: [0, 0], reshuffles: 0,
-      over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals,
+      over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals, finalTurn: false,
       stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0] },
     };
   }
@@ -142,10 +142,32 @@ export function endTurn(state, { rng = Math.random, force = false } = {}) {
   const pv = previewEnd(state);
   if (!pv.legal && !(force && state.hands[p].length === 0 && !state.over)) return { ok: false, reason: pv.reason, events };
   state.turns[p]++;
-  if (state.done[p] === 3) {
-    state.over = true; state.winner = p; state.endReason = 'seals';
-    events.push({ t: 'gameover', winner: p, reason: 'seals' });
-    return { ok: true, events };
+  const opener = state.first;
+  if (state.finalTurn) {
+    // p is replying to the opener's seal-out. Judge the board as it stands now.
+    state.finalTurn = false;
+    const openerSealed = state.done[opener] === 3;
+    if (state.done[p] === 3) {
+      state.over = true;
+      if (openerSealed) { state.winner = null; state.endReason = 'double'; } // both sealed out: a drawn round
+      else { state.winner = p; state.endReason = 'seals'; } // a Force broke their seal, then p sealed out
+      events.push({ t: 'gameover', winner: state.winner, reason: state.endReason });
+      return { ok: true, events };
+    }
+    if (openerSealed) {
+      state.over = true; state.winner = opener; state.endReason = 'seals';
+      events.push({ t: 'gameover', winner: opener, reason: 'seals' });
+      return { ok: true, events };
+    }
+    events.push({ t: 'winCancelled', player: opener }); // a seal was broken: the round goes on
+  } else if (state.done[p] === 3) {
+    if (p !== opener) {
+      state.over = true; state.winner = p; state.endReason = 'seals';
+      events.push({ t: 'gameover', winner: p, reason: 'seals' });
+      return { ok: true, events };
+    }
+    // The opener sealed out: the other player gets one last turn to match it or break it.
+    state.finalTurn = true;
   }
   // refill the hand
   const drawn = [];
@@ -164,8 +186,15 @@ export function endTurn(state, { rng = Math.random, force = false } = {}) {
   }
   events.push({ t: 'draw', player: p, cards: drawn });
   state.turn = 1 - p;
+  if (state.finalTurn) events.push({ t: 'finalTurn', player: state.turn, opener: p });
   events.push({ t: 'turn', player: state.turn });
-  if (!state.hands[state.turn].length) finishByDeck(state, events);
+  if (!state.hands[state.turn].length) {
+    if (state.finalTurn) { // no cards left to reply with: the opener's seal-out stands
+      state.finalTurn = false;
+      state.over = true; state.winner = p; state.endReason = 'seals';
+      events.push({ t: 'gameover', winner: p, reason: 'seals' });
+    } else finishByDeck(state, events);
+  }
   return { ok: true, events };
 }
 

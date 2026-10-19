@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { cardId, seeded, is13, valueOf } from '../www/js/engine/cards.js';
 import { applyFull } from '../www/js/engine/core.js';
 import { newGame, playCard, endTurn, previewEnd, canPlay, forceLegal, lockPair, unlockPair, lockOptions, runStep } from '../www/js/engine/rules.js';
-import { planTurn } from '../www/js/engine/ai.js';
+import { planTurn, DEFAULT_PERSONA } from '../www/js/engine/ai.js';
 
 const SUN = 0, BLOOM = 1, MOON = 2, THORN = 3;
 const c = (suit, rank) => cardId(suit, rank);
@@ -14,7 +14,7 @@ function mk({ piles, hands = [[], []], turn = 0, lb, done = [0, 0], deck = [], d
   while (full.length < 8) full.push([c(SUN, 1)]);
   return {
     piles: full, lb: lb || new Array(8).fill(0), done, hands, deck, discard, turn, first: turn, plays: 0,
-    turns: [0, 0], reshuffles: 0, over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals: [],
+    turns: [0, 0], reshuffles: 0, over: false, winner: null, endReason: null, lockBreak, redeals: 0, openSeals: [], finalTurn: false,
     stats: { busts: [0, 0], seals: [0, 0], breaks: [0, 0] },
   };
 }
@@ -280,4 +280,136 @@ test('AI mirror games finish in a sensible number of turns (player-chosen locks,
   }
   console.log(`  pro mirror: avg total turns ${(plays / n).toFixed(1)} (python: 9.9), >=10 turns ${(100 * long / n).toFixed(0)}% (python: 26%), deck-outs ${(100 * deckouts / n).toFixed(0)}%, first player wins ${(100 * first / n).toFixed(0)}%, fallbacks ${fb}`);
   assert.ok(plays / n > 5 && plays / n < 16);
+});
+
+// ---------------------------------------------------------------- opener's seal-out and the reply turn
+const DECK8 = () => [c(SUN, 2), c(SUN, 3), c(MOON, 2), c(MOON, 3), c(BLOOM, 2), c(BLOOM, 3), c(THORN, 2), c(THORN, 3)];
+/** Player 0 (the opener) has just sealed the 7 (piles 0+1) and the 11 (piles 2+3) and is ready to end the turn.
+ *  With `foeReady`, player 1 is one card from the same: a +3 on pile 4 makes 3+4 = 7 and 5+6 = 11. */
+function openerSealedOut({ foeHand = [c(SUN, 2)], foeReady = false } = {}) {
+  const s = mk({
+    piles: [[c(SUN, 3)], [c(SUN, 4)], [c(SUN, 5)], [c(SUN, 6)], ...(foeReady ? [[c(SUN, 1)], [c(SUN, 4)], [c(SUN, 5)], [c(SUN, 6)]] : [])],
+    hands: [[], foeHand], deck: DECK8(), turn: 0,
+  });
+  assert.ok(lockPair(s, [0, 1], 1).ok);
+  assert.ok(lockPair(s, [2, 3], 2).ok);
+  return s;
+}
+const foeSealsOut = (s) => {
+  assert.ok(lockPair(s, [4, 5], 1).ok);
+  assert.ok(lockPair(s, [6, 7], 2).ok);
+};
+
+test('the opener sealing out does not end the round: the other player gets one last turn', () => {
+  const s = openerSealedOut();
+  const r = endTurn(s);
+  assert.ok(r.ok);
+  assert.equal(s.over, false);
+  assert.equal(s.finalTurn, true);
+  assert.equal(s.turn, 1);
+  assert.equal(s.hands[0].length, 4, 'the opener still refills their hand');
+  assert.ok(r.events.some((e) => e.t === 'finalTurn' && e.player === 1));
+});
+
+test('the player who did not open wins on the spot when they seal out', () => {
+  const s = mk({ piles: [[c(SUN, 1)], [c(SUN, 1)], [c(SUN, 1)], [c(SUN, 1)], [c(SUN, 3)], [c(SUN, 4)], [c(SUN, 5)], [c(SUN, 6)]], turn: 1 });
+  s.first = 0;
+  foeSealsOut(s);
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, 1);
+  assert.equal(s.endReason, 'seals');
+  assert.equal(s.finalTurn, false);
+});
+
+test('reply turn: if the replier cannot match or break the seals, the opener wins', () => {
+  const s = openerSealedOut();
+  endTurn(s);
+  assert.ok(playCard(s, c(SUN, 2), 4, 'cover').ok);
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, 0);
+  assert.equal(s.endReason, 'seals');
+  assert.equal(s.finalTurn, false);
+});
+
+test('reply turn: sealing out as well is a drawn round (double seal-out)', () => {
+  const s = openerSealedOut({ foeHand: [c(SUN, 3)], foeReady: true });
+  endTurn(s);
+  assert.ok(playCard(s, c(SUN, 3), 4, 'cover').ok);
+  foeSealsOut(s);
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, null);
+  assert.equal(s.endReason, 'double');
+  assert.ok(r.events.some((e) => e.t === 'gameover' && e.winner === null && e.reason === 'double'));
+});
+
+test('reply turn: a Force that breaks a seal cancels the win and the round goes on', () => {
+  const s = openerSealedOut({ foeHand: [c(THORN, 13), c(BLOOM, 4)] });
+  endTurn(s);
+  const b = playCard(s, c(THORN, 13), 0, 'cover');
+  assert.ok(b.ok && b.events.some((e) => e.t === 'unseal'));
+  assert.equal(s.done[0], 2, 'the 7 is broken, the 11 still holds');
+  assert.ok(playCard(s, c(BLOOM, 4), 0, 'cover').ok);
+  const r = endTurn(s);
+  assert.ok(r.ok);
+  assert.equal(s.over, false);
+  assert.equal(s.finalTurn, false);
+  assert.equal(s.turn, 0, 'play passes back to the opener as usual');
+  assert.ok(r.events.some((e) => e.t === 'winCancelled'));
+});
+
+test('reply turn: break a seal and seal out yourself and you win outright', () => {
+  const s = openerSealedOut({ foeHand: [c(THORN, 13), c(SUN, 3)], foeReady: true });
+  endTurn(s);
+  assert.ok(playCard(s, c(THORN, 13), 0, 'cover').ok);
+  assert.ok(playCard(s, c(SUN, 3), 4, 'cover').ok);
+  foeSealsOut(s);
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, 1);
+  assert.equal(s.endReason, 'seals');
+});
+
+test('reply turn: with no cards to reply with, the opener\'s seal-out stands', () => {
+  const s = openerSealedOut({ foeHand: [] });
+  s.deck = DECK8().slice(0, 4); // only enough to refill the opener
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, 0);
+  assert.equal(s.endReason, 'seals');
+  assert.equal(s.finalTurn, false);
+});
+
+test('reply turn: with Forces Break Seals off nothing can cancel the win, so the opener wins', () => {
+  const s = openerSealedOut({ foeHand: [c(THORN, 13), c(SUN, 2)] });
+  s.lockBreak = false;
+  endTurn(s);
+  assert.equal(canPlay(s, c(THORN, 13), 0, 'cover'), false);
+  assert.ok(playCard(s, c(THORN, 13), 4, 'cover').ok); // busts their own pile instead
+  assert.ok(playCard(s, c(SUN, 2), 4, 'cover').ok);
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over && s.winner === 0);
+});
+
+test('AI on a reply turn breaks the opener\'s seal with a Force when it cannot seal out', () => {
+  const s = openerSealedOut({ foeHand: [c(THORN, 13), c(SUN, 2), c(BLOOM, 2), c(MOON, 2)] });
+  endTurn(s);
+  for (const d of ['experienced', 'professional']) {
+    const plan = planTurn(s, 1, DEFAULT_PERSONA, d, seeded(5));
+    assert.ok(plan.legal, d);
+    assert.ok(plan.plan.some((m) => m.type === 'play' && m.card === c(THORN, 13) && m.pile < 4), `${d} should break a seal`);
+  }
+});
+
+test('AI on a reply turn takes the win (break, then seal out) over the draw (just seal out)', () => {
+  const s = openerSealedOut({ foeHand: [c(THORN, 13), c(SUN, 3), c(BLOOM, 2), c(MOON, 2)], foeReady: true });
+  endTurn(s);
+  const plan = planTurn(s, 1, DEFAULT_PERSONA, 'professional', seeded(9));
+  assert.ok(plan.legal);
+  for (const m of plan.plan) assert.ok(runStep(s, m).ok, JSON.stringify(m));
+  const r = endTurn(s);
+  assert.ok(r.ok && s.over);
+  assert.equal(s.winner, 1, 'the AI should have broken a seal and sealed out');
 });

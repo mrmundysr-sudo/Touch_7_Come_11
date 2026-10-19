@@ -28,6 +28,7 @@ Guidance for Claude when working in this repo.
 ## Locking rules (as implemented)
 - Nothing locks by itself and nobody starts locked. On your own turn you tap **Seals** to lock a pair of your piles that adds to 7 or 11, or to unlock a pair you locked. No limit on how often, no cost.
 - Both targets locked when the turn ends wins. Locked piles are frozen, except that a 13 played on one breaks the seal (the "Forces Break Seals" setting).
+- Opener's reply turn: if the player who opened the round (`state.first`) ends a turn with both targets locked, the round does not end. `state.finalTurn` is set and the other player gets one last turn. At the end of it: both sealed = draw (`endReason: 'double'`, 2 points each in `match.js`); only the opener sealed = opener wins; only the replier sealed (they broke a seal with a 13) = replier wins; neither = the win is cancelled (`winCancelled` event) and normal play continues. If the non-opener seals out, the round still ends on the spot. If the replier has no cards, the opener's win stands.
 - Engine: `lockPair`, `unlockPair`, `lockOptions`, `lockedPairs`, `runStep` in `www/js/engine/rules.js`. The AI plan is a list of steps: `{type:'unlock'|'play'|'lock', ...}`.
 
 ## Conventions
