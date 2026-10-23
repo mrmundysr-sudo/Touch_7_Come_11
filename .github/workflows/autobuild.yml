@@ -15,7 +15,7 @@ concurrency:
 
 jobs:
   build:
-    uses: mrmundysr-sudo/touch-development/.github/workflows/android-build.yml@2cf7c58abbfb73327a954e0b6be52a59af8ac0d8 # prebuild candidate (test only)
+    uses: mrmundysr-sudo/touch-development/.github/workflows/android-build.yml@46c14e78221286918b69282f627eeb0e73c7ad96 # prebuild candidate (test only)
     with:
       artifact_name: Touch-7-Come-11-debug-${{ github.run_number }}
       java_version: "21"
