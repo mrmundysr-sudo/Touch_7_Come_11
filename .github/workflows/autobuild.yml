@@ -1,0 +1,24 @@
+# Touch AutoBuild caller (development branches only). TEST: points at the hub prebuild candidate.
+name: AutoBuild (dev branches)
+
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # ceiling only; the shared workflow's build job is read-only
+
+concurrency:
+  group: autobuild-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: mrmundysr-sudo/touch-development/.github/workflows/android-build.yml@2cf7c58abbfb73327a954e0b6be52a59af8ac0d8 # prebuild candidate (test only)
+    with:
+      artifact_name: Touch-7-Come-11-debug-${{ github.run_number }}
+      java_version: "21"
+      node_version: "20"
+      prebuild_script: .autobuild/prebuild.sh
+      project_dir: android
