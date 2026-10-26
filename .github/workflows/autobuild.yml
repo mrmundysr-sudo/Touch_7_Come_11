@@ -1,0 +1,28 @@
+# Touch AutoBuild caller (development branches only).
+# Builds every claude/** branch push and manual dispatch with the shared hub workflow.
+# It does not run on main or master, so it does not overlap with android.yml (which keeps
+# producing touch-7-come-11-apk and the apk-N prerelease on main/master pushes).
+# Pinned to a reviewed commit SHA of the hub (see autobuild/VERSIONING.md in touch-development), never a branch.
+name: AutoBuild (dev branches)
+
+on:
+  push:
+    branches: ["claude/**"]
+  workflow_dispatch:
+
+permissions:
+  contents: write   # ceiling only; the shared workflow's build job is read-only
+
+concurrency:
+  group: autobuild-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    uses: mrmundysr-sudo/touch-development/.github/workflows/android-build.yml@43194efba2b20db004232185651855592634ac0c # v1.1.0
+    with:
+      artifact_name: Touch-7-Come-11-debug-${{ github.run_number }}
+      java_version: "21"
+      node_version: "20"
+      prebuild_script: .autobuild/prebuild.sh
+      project_dir: android
