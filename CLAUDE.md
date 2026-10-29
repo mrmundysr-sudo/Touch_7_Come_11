@@ -48,3 +48,7 @@ Guidance for Claude when working in this repo.
 
 ## Git
 - Default branch is `main`. Work happens on `claude/...` branches merged via pull request.
+
+APK delivery: an Android assignment is finished only when a tappable APK is attached to the chat (`SendUserFile`), labelled
+CI or local. Standard: https://github.com/mrmundysr-sudo/touch-development/blob/main/autobuild/APK-DELIVERY.md ; this repo's
+settings are in `.autobuild/deliver.conf`. Run the hub's `autobuild/deliver/deliver_apk.sh --repo . --commit <sha>`.
